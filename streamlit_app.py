@@ -19,7 +19,7 @@ IMG = 224
 NOISE_SIGMA_MIN = 3.0
 LOW_CONF = 0.50
 
-# ลำดับต้องเหมือน CLASS_NAMES ตอนเทรน
+# ลำดับต้องเหมือน CLASS_NAMES ตอนเทรน[cite: 1]
 CLASS_NAMES = [
     "hanuman_carry_mountain",
     "hanuman_flag",
@@ -136,9 +136,55 @@ def show_result(res):
     )
 
 
-# ---------------- UI ----------------
-st.set_page_config(page_title="สแกนท่าหนุมาน", page_icon="🐒")
-st.title("🐒 สแกนท่าหนุมาน")
+# ---------------- UI & Custom Styling (HunuMatch Theme) ----------------
+st.set_page_config(page_title="HANUMATCH - สแกนท่าหนุมาน", page_icon="🐒")
+
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@400;600;700&display=swap');
+
+/* กำหนดฟอนต์ Noto Serif Thai และสีพื้นหลัง Frangipani Cream (#F2F0E1) */
+html, body, [class*="css"] {
+    font-family: 'Noto Serif Thai', serif;
+}
+
+.stApp {
+    background-color: #F2F0E1;
+    color: #662E26;
+}
+
+/* หัวข้อต่างๆ */
+h1, h2, h3 {
+    font-family: 'Noto Serif Thai', serif;
+    color: #662E26 !important;
+}
+
+/* ปุ่มกดหลัก (Monk Robe #CC6621) ให้โค้งมนสวยงาม */
+.stButton>button {
+    background-color: #CC6621 !important;
+    color: #F2F0E1 !important;
+    font-family: 'Noto Serif Thai', serif !important;
+    font-weight: 600;
+    border-radius: 25px !important;
+    border: none !important;
+    box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
+}
+
+.stButton>button:hover {
+    background-color: #D9B658 !important; /* Temple Gold */
+    color: #662E26 !important;
+}
+
+/* ปรับแต่งกล่องวิทยุ/ตัวเลือก */
+.stRadio label {
+    font-family: 'Noto Serif Thai', serif;
+    color: #662E26;
+    font-weight: 600;
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.title("🐒 HANUMATCH")
 st.write(
     "ถ่ายรูปจากกล้อง หรืออัปโหลดภาพจิตรกรรม/ประติมากรรม "
     "แล้วให้ AI ทายว่าเป็นท่าไหน พร้อมที่มาและความเชื่อของไทย"
@@ -155,7 +201,7 @@ if file is not None:
         pil = Image.open(file)
         rgb = pil_to_rgb(pil)
         proc = preprocess(rgb)
-        x = np.expand_dims(proc.astype(np.float32), 0)  # 0-255 ตามตอนเทรน
+        x = np.expand_dims(proc.astype(np.float32), 0)  # 0-255 ตามตอนเทรน[cite: 1]
         with st.spinner("กำลังวิเคราะห์..."):
             probs = get_model().predict(x, verbose=0)[0]
         top = int(np.argmax(probs))
