@@ -1,25 +1,30 @@
-"""Hanuman pose scanner - Streamlit version (camera + upload + popup)."""
+"""HANUMATCH - Hanuman pose scanner (Streamlit) with custom camera UI."""
 import os
 
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "-1")
 
+import base64
+import html
+import io
 import json
 
 import cv2
 import numpy as np
 import streamlit as st
+import streamlit.components.v1 as components
 from PIL import Image, ImageOps
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(HERE, "hanuman_model.keras")
 LORE_PATH = os.path.join(HERE, "lore.json")
+ASSETS = os.path.join(HERE, "assets")
 
 IMG = 224
 NOISE_SIGMA_MIN = 3.0
 LOW_CONF = 0.50
 
-# ลำดับต้องเหมือน CLASS_NAMES ตอนเทรน[cite: 1]
+# ลำดับต้องเหมือน CLASS_NAMES ตอนเทรน
 CLASS_NAMES = [
     "hanuman_carry_mountain",
     "hanuman_flag",
@@ -30,6 +35,19 @@ CLASS_NAMES = [
 
 with open(LORE_PATH, encoding="utf-8") as f:
     LORE = json.load(f)
+
+
+def b64_file(name: str) -> str:
+    path = os.path.join(ASSETS, name)
+    if not os.path.exists(path):
+        return ""
+    with open(path, "rb") as fh:
+        return base64.b64encode(fh.read()).decode()
+
+
+LOGO_B64 = b64_file("logo.jpg")
+MARK_B64 = b64_file("mark.jpg")
+PATTERN_B64 = b64_file("pattern.jpg")
 
 
 @st.cache_resource(show_spinner="กำลังโหลดโมเดล...")
@@ -101,123 +119,199 @@ def preprocess(img):
     return pad_to_square(x, IMG, 0)
 
 
+def data_url_to_pil(url: str) -> Image.Image:
+    return Image.open(io.BytesIO(base64.b64decode(url.split(",", 1)[1])))
+
+
+def analyze(pil: Image.Image) -> dict:
+    rgb = pil_to_rgb(pil)
+    proc = preprocess(rgb)
+    x = np.expand_dims(proc.astype(np.float32), 0)  # 0-255 ตามตอนเทรน
+    probs = get_model().predict(x, verbose=0)[0]
+    top = int(np.argmax(probs))
+    thumb = Image.fromarray(rgb)
+    thumb.thumbnail((360, 360))
+    buf = io.BytesIO()
+    thumb.convert("RGB").save(buf, format="JPEG", quality=85)
+    return {
+        "probs": probs,
+        "top": top,
+        "key": CLASS_NAMES[top],
+        "thumb": base64.b64encode(buf.getvalue()).decode(),
+    }
+
+
+# ---------------- Theme (HANUMATCH) ----------------
+# Monk Robe #CC6621 | Lao Red Wood #662E26 | Temple Gold #D9B658 | Frangipani Cream #F2F0E1
+BASE_CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@400;600;700&family=Noto+Serif:wght@400;600;700&display=swap');
+:root{--robe:#CC6621;--wood:#662E26;--gold:#D9B658;--cream:#F2F0E1;--pat:url(data:image/jpeg;base64,__PAT__)}
+.stApp,.stApp p,.stApp h1,.stApp h2,.stApp h3,.stApp li,.stApp button,.stApp label,
+div[role="dialog"] p,div[role="dialog"] h2,div[role="dialog"] li,div[role="dialog"] summary{
+  font-family:'Noto Serif Thai','Noto Serif',serif}
+header[data-testid="stHeader"]{display:none}
+#MainMenu,footer{visibility:hidden}
+.block-container{max-width:460px;padding:1.2rem 1rem 2rem}
+.stButton button{background:var(--robe)!important;color:var(--cream)!important;border:none!important;
+  border-radius:999px!important;font-weight:600;min-height:2.9rem;box-shadow:0 5px 12px rgba(102,46,38,.25)}
+.stButton button:hover{background:var(--gold)!important;color:var(--wood)!important}
+.stButton button p{color:inherit!important}
+button[data-testid="stBaseButton-secondary"]{background:transparent!important;color:var(--gold)!important;
+  border:1.5px solid var(--gold)!important;box-shadow:none!important}
+button[data-testid="stBaseButton-secondary"]:hover{background:var(--gold)!important;color:var(--wood)!important}
+
+/* ---- Popup (ผลการวิเคราะห์) ---- */
+div[role="dialog"]{background:var(--wood) var(--pat) center/300px!important;border:3px solid var(--gold)!important;
+  border-radius:26px!important}
+div[role="dialog"] h2{color:var(--cream)!important;text-align:center}
+div[role="dialog"] button{color:var(--gold)!important}
+.hm-emb{display:block;width:52px;height:52px;border-radius:50%;margin:0 auto 10px;border:2px solid var(--gold);object-fit:cover}
+.hm-card{background:var(--cream);color:#3a2218;border-radius:22px;padding:18px 16px 14px;
+  box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.hm-title{text-align:center;color:var(--wood);font-size:1.3rem;line-height:1.35;font-weight:700}
+.hm-title small{display:block;font-size:.9rem;font-weight:400}
+.hm-ring{width:176px;height:176px;border-radius:50%;margin:14px auto 10px;border:7px solid var(--robe);
+  overflow:hidden;background:#fff;box-shadow:0 4px 12px rgba(0,0,0,.2)}
+.hm-ring img{width:100%;height:100%;object-fit:cover;display:block}
+.hm-conf{text-align:center;font-weight:600;color:var(--wood);margin-bottom:6px}
+.hm-track{height:14px;background:#d8d2c0;border-radius:99px;overflow:hidden;margin-bottom:12px}
+.hm-track i{display:block;height:100%;background:linear-gradient(90deg,var(--robe),var(--gold));border-radius:99px}
+.hm-warn{background:#fff0d6;border:1px solid #e0a040;border-radius:12px;padding:8px 12px;font-size:.88rem;margin-bottom:10px}
+.hm-box{background:rgba(102,46,38,.07);border-radius:14px;padding:10px 12px;margin-bottom:10px}
+.hm-bt{font-weight:700;color:var(--wood);margin-bottom:4px}
+.hm-bs{max-height:150px;overflow-y:auto;font-size:.92rem;line-height:1.65;padding-right:4px}
+.hm-bs ul{margin:0;padding-left:18px}
+.hm-note{margin-top:6px;font-size:.8rem;color:#7a6652}
+.hm-card details{margin-top:4px;font-size:.88rem}
+.hm-card summary{cursor:pointer;color:var(--wood);font-weight:600}
+.hm-row{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:.82rem}
+.hm-lbl{width:46%;flex:none}
+.hm-bar{flex:1;height:10px;background:#d8d2c0;border-radius:6px;overflow:hidden}
+.hm-bar i{display:block;height:100%;background:var(--gold)}
+.hm-row.top .hm-bar i{background:var(--robe)}
+.hm-val{width:46px;text-align:right;flex:none}
+.hm-foot{margin-top:10px;font-size:.76rem;color:#7a6652;line-height:1.5}
+</style>
+""".replace("__PAT__", PATTERN_B64)
+
+HOME_CSS = """
+<style>
+.stApp{background:linear-gradient(rgba(252,251,246,.93),rgba(252,251,246,.93)),var(--pat) center/360px}
+.hm-home{text-align:center;padding-top:4vh}
+.hm-home img{width:64%;max-width:260px;mix-blend-mode:multiply}
+.hm-home h2{color:var(--wood);font-size:1.9rem;margin:.2rem 0 0;font-weight:700}
+.hm-home p{color:#8a6a4a;margin:.2rem 0 1.6rem;font-size:1rem}
+</style>
+"""
+
+CAMERA_CSS = """
+<style>
+.stApp{background:#120a08}
+.hm-last{color:var(--cream);text-align:center;font-size:.92rem;margin:.6rem 0 .2rem}
+</style>
+"""
+
+st.set_page_config(page_title="HANUMATCH - สแกนท่าหนุมาน", page_icon="🐒", layout="centered")
+st.markdown(BASE_CSS, unsafe_allow_html=True)
+
+camera = components.declare_component(
+    "hanumatch_camera", path=os.path.join(HERE, "camera_component")
+)
+
 
 # ---------------- Popup ----------------
-@st.dialog("ผลการสแกน", width="large")
-def show_result(res):
+def result_card_html(res: dict) -> str:
+    esc = html.escape
     info = LORE[res["key"]]
-    pct = res["probs"][res["top"]] * 100
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        st.image(res["image"], use_container_width=True)
-    with c2:
-        st.subheader(f"{info.get('emoji', '')} {info['thai_name']}")
-        st.metric("ตรงกับโมเดล", f"{pct:.1f}%")
-    if res["probs"][res["top"]] < LOW_CONF:
-        st.warning(
-            "โมเดลไม่ค่อยมั่นใจ (ต่ำกว่า 50%) ภาพนี้อาจไม่ใช่หนึ่งในห้าท่านี้ "
-            "หรือภาพไม่ชัด ลองถ่ายใหม่ให้เห็นฉาก/วัตถุหลักครบ"
+    probs = res["probs"]
+    pct = float(probs[res["top"]]) * 100
+    warn = ""
+    if probs[res["top"]] < LOW_CONF:
+        warn = (
+            '<div class="hm-warn">⚠️ โมเดลไม่ค่อยมั่นใจ (ต่ำกว่า 50%) ภาพนี้อาจไม่ใช่หนึ่งในห้าท่านี้ '
+            "หรือภาพไม่ชัด ลองถ่ายใหม่ให้เห็นท่าหลักครบทั้งองค์</div>"
         )
-    st.markdown("#### 📜 ที่มา")
-    st.write(info["story"])
-    st.markdown("#### 🙏 ความเชื่อ")
-    for b in info["beliefs"]:
-        st.markdown(f"- {b}")
-    if info.get("note"):
-        st.caption(f"หมายเหตุ: {info['note']}")
-    st.markdown("#### ความน่าจะเป็นของทุกท่า")
+    beliefs = "".join(f"<li>{esc(b)}</li>" for b in info["beliefs"])
+    note = f'<div class="hm-note">หมายเหตุ: {esc(info["note"])}</div>' if info.get("note") else ""
+    bars = ""
     for i, k in enumerate(CLASS_NAMES):
-        p = float(res["probs"][i])
-        st.write(f"{LORE[k]['thai_name']} — {p * 100:.1f}%")
-        st.progress(min(max(p, 0.0), 1.0))
-    st.caption(
-        "เปอร์เซ็นต์คือความน่าจะเป็นที่โมเดลให้ ไม่ใช่ความแม่นยำรวม "
-        "และโมเดลถูกสอนให้แยกเฉพาะ 5 ท่านี้ ถ้าส่งภาพอื่นก็จะเลือกท่าที่ใกล้ที่สุดเสมอ"
+        v = float(probs[i]) * 100
+        bars += (
+            f'<div class="hm-row{" top" if i == res["top"] else ""}">'
+            f'<span class="hm-lbl">{esc(LORE[k]["thai_name"])}</span>'
+            f'<span class="hm-bar"><i style="width:{v:.1f}%"></i></span>'
+            f'<span class="hm-val">{v:.1f}%</span></div>'
+        )
+    emb = f'<img class="hm-emb" src="data:image/jpeg;base64,{MARK_B64}">' if MARK_B64 else ""
+    # หมายเหตุ: ห้ามเว้นบรรทัดว่าง/ย่อหน้าใน HTML เพราะ Markdown จะตีความเป็นโค้ด
+    return (
+        '<div class="hm-wrap">'
+        + emb
+        + '<div class="hm-card">'
+        + f'<div class="hm-title"><small>ผลการวิเคราะห์:</small>{info.get("emoji", "")} {esc(info["thai_name"])}</div>'
+        + f'<div class="hm-ring"><img src="data:image/jpeg;base64,{res["thumb"]}"></div>'
+        + f'<div class="hm-conf">ความมั่นใจ: {pct:.1f}%</div>'
+        + f'<div class="hm-track"><i style="width:{pct:.1f}%"></i></div>'
+        + warn
+        + f'<div class="hm-box"><div class="hm-bt">ตำนาน</div><div class="hm-bs">{esc(info["story"])}</div></div>'
+        + f'<div class="hm-box"><div class="hm-bt">ความเชื่อ</div><div class="hm-bs"><ul>{beliefs}</ul>{note}</div></div>'
+        + f"<details><summary>ความน่าจะเป็นของทุกท่า</summary>{bars}</details>"
+        + '<div class="hm-foot">เปอร์เซ็นต์คือความน่าจะเป็นที่โมเดลให้ ไม่ใช่ความแม่นยำรวม '
+        + "และโมเดลถูกสอนให้แยกเฉพาะ 5 ท่านี้ ถ้าส่งภาพอื่นก็จะเลือกท่าที่ใกล้ที่สุดเสมอ</div>"
+        + "</div></div>"
     )
 
 
-# ---------------- UI & Custom Styling (HunuMatch Theme) ----------------
-st.set_page_config(page_title="HANUMATCH - สแกนท่าหนุมาน", page_icon="🐒")
+@st.dialog("ผลการวิเคราะห์", width="large")
+def show_result(res: dict):
+    st.markdown(result_card_html(res), unsafe_allow_html=True)
 
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@400;600;700&display=swap');
 
-/* กำหนดฟอนต์ Noto Serif Thai และสีพื้นหลัง Frangipani Cream (#F2F0E1) */
-html, body, [class*="css"] {
-    font-family: 'Noto Serif Thai', serif;
-}
+# ---------------- Pages ----------------
+def go(page: str):
+    st.session_state["page"] = page
 
-.stApp {
-    background-color: #F2F0E1;
-    color: #662E26;
-}
 
-/* หัวข้อต่างๆ */
-h1, h2, h3 {
-    font-family: 'Noto Serif Thai', serif;
-    color: #662E26 !important;
-}
+st.session_state.setdefault("page", "home")
+st.session_state.setdefault("result", None)
+st.session_state.setdefault("last_nonce", None)
 
-/* ปุ่มกดหลัก (Monk Robe #CC6621) ให้โค้งมนสวยงาม */
-.stButton>button {
-    background-color: #CC6621 !important;
-    color: #F2F0E1 !important;
-    font-family: 'Noto Serif Thai', serif !important;
-    font-weight: 600;
-    border-radius: 25px !important;
-    border: none !important;
-    box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
-}
+if st.session_state["page"] == "home":
+    st.markdown(HOME_CSS, unsafe_allow_html=True)
+    st.markdown(
+        '<div class="hm-home">'
+        + (f'<img src="data:image/jpeg;base64,{LOGO_B64}" alt="HANUMATCH">' if LOGO_B64 else "<h1>HANUMATCH</h1>")
+        + "<h2>สแกนท่ามหาฤทธิ์</h2><p>Learn Thai Legends with AI</p></div>",
+        unsafe_allow_html=True,
+    )
+    st.button("เริ่มต้นการใช้งาน", type="primary", use_container_width=True, on_click=go, args=("camera",))
 
-.stButton>button:hover {
-    background-color: #D9B658 !important; /* Temple Gold */
-    color: #662E26 !important;
-}
-
-/* ปรับแต่งกล่องวิทยุ/ตัวเลือก */
-.stRadio label {
-    font-family: 'Noto Serif Thai', serif;
-    color: #662E26;
-    font-weight: 600;
-}
-</style>
-""", unsafe_allow_html=True)
-
-st.title("🐒 HANUMATCH")
-st.write(
-    "ถ่ายรูปจากกล้อง หรืออัปโหลดภาพจิตรกรรม/ประติมากรรม "
-    "แล้วให้ AI ทายว่าเป็นท่าไหน พร้อมที่มาและความเชื่อของไทย"
-)
-
-mode = st.radio("เลือกวิธีใส่ภาพ", ["📷 ถ่ายรูป", "🖼️ อัปโหลด"], horizontal=True)
-if mode.startswith("📷"):
-    file = st.camera_input("ถ่ายรูปท่าหนุมาน")
 else:
-    file = st.file_uploader("เลือกไฟล์ภาพ", type=["jpg", "jpeg", "png", "webp", "bmp"])
+    st.markdown(CAMERA_CSS, unsafe_allow_html=True)
+    val = camera(mark=MARK_B64, key="hm_cam", default=None)
 
-if file is not None:
-    if st.button("🔍 สแกนภาพ", type="primary", use_container_width=True):
-        pil = Image.open(file)
-        rgb = pil_to_rgb(pil)
-        proc = preprocess(rgb)
-        x = np.expand_dims(proc.astype(np.float32), 0)  # 0-255 ตามตอนเทรน[cite: 1]
-        with st.spinner("กำลังวิเคราะห์..."):
-            probs = get_model().predict(x, verbose=0)[0]
-        top = int(np.argmax(probs))
-        thumb = Image.fromarray(rgb)
-        thumb.thumbnail((400, 400))
-        st.session_state["result"] = {
-            "probs": probs,
-            "top": top,
-            "key": CLASS_NAMES[top],
-            "image": thumb,
-        }
-        show_result(st.session_state["result"])
+    if isinstance(val, dict) and val.get("image") and val.get("nonce") != st.session_state["last_nonce"]:
+        st.session_state["last_nonce"] = val["nonce"]
+        try:
+            with st.spinner("กำลังวิเคราะห์..."):
+                st.session_state["result"] = analyze(data_url_to_pil(val["image"]))
+            show_result(st.session_state["result"])
+        except Exception as exc:  # noqa: BLE001
+            st.error(f"วิเคราะห์ภาพไม่สำเร็จ: {exc}")
 
-res = st.session_state.get("result")
-if res:
-    info = LORE[res["key"]]
-    st.success(f"ผลล่าสุด: {info['thai_name']} — {res['probs'][res['top']] * 100:.1f}%")
-    if st.button("เปิดดูที่มาและความเชื่ออีกครั้ง"):
-        show_result(res)
+    res = st.session_state["result"]
+    if res:
+        info = LORE[res["key"]]
+        st.markdown(
+            f'<div class="hm-last">ผลล่าสุด: {html.escape(info["thai_name"])} — {res["probs"][res["top"]] * 100:.1f}%</div>',
+            unsafe_allow_html=True,
+        )
+    c1, c2 = st.columns(2)
+    with c1:
+        st.button("← หน้าแรก", type="secondary", use_container_width=True, on_click=go, args=("home",))
+    with c2:
+        if res and st.button("ดูผลล่าสุด", type="secondary", use_container_width=True):
+            show_result(res)
+
+    get_model()  # อุ่นโมเดลไว้ล่วงหน้าให้สแกนครั้งแรกเร็วขึ้น

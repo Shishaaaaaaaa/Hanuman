@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@400;600;700&family=Noto+Serif:wght@400;600&display=swap');
+:root{--robe:#CC6621;--wood:#662E26;--gold:#D9B658;--cream:#F2F0E1}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:transparent;font-family:'Noto Serif Thai','Noto Serif',serif;color:var(--cream)}
+.cam{position:relative;width:100%;background:#0b0605;border-radius:26px;overflow:hidden;
+  box-shadow:0 8px 28px rgba(0,0,0,.45)}
+.view{position:absolute;left:0;right:0;top:0;bottom:118px;background:#000;overflow:hidden}
+video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+video.mirror{transform:scaleX(-1)}
+.frame{position:absolute;left:9%;right:9%;top:6%;bottom:13%;border:3px solid var(--gold);border-radius:22px;
+  box-shadow:0 0 18px 4px rgba(217,182,88,.55),inset 0 0 18px 2px rgba(217,182,88,.35);pointer-events:none}
+.corner{position:absolute;width:64px;height:64px;pointer-events:none}
+.corner.tl{left:-5px;top:-5px}
+.corner.tr{right:-5px;top:-5px;transform:scaleX(-1)}
+.corner.bl{left:-5px;bottom:-5px;transform:scaleY(-1)}
+.corner.br{right:-5px;bottom:-5px;transform:scale(-1,-1)}
+.bracket{position:absolute;width:26px;height:42px;border:2px solid var(--robe);pointer-events:none}
+.bracket.l{left:20%;top:30%;border-right:none}
+.bracket.r{right:20%;top:30%;border-left:none}
+.bracket.l2{left:20%;bottom:30%;border-right:none}
+.bracket.r2{right:20%;bottom:30%;border-left:none}
+.cap{position:absolute;left:0;right:0;bottom:15.5%;text-align:center;font-weight:600;font-size:1.08rem;
+  text-shadow:0 2px 6px rgba(0,0,0,.9);pointer-events:none}
+.msg{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;
+  padding:28px;line-height:1.7;font-size:.95rem;background:rgba(10,5,4,.88)}
+.bar{position:absolute;left:0;right:0;bottom:0;height:118px;background:var(--wood);
+  border-radius:26px 26px 0 0;display:flex;align-items:center;justify-content:space-around;padding:0 10px}
+.side{display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;
+  color:var(--cream);font-family:inherit;font-size:.8rem;cursor:pointer;width:84px}
+.ico{width:46px;height:46px;border-radius:50%;border:2px solid var(--gold);display:flex;
+  align-items:center;justify-content:center;background:rgba(0,0,0,.18)}
+.ico svg{width:24px;height:24px;stroke:var(--gold);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.shutter{width:86px;height:86px;border-radius:50%;border:4px solid var(--gold);padding:5px;background:var(--cream);
+  cursor:pointer;margin-top:-14px;box-shadow:0 0 0 4px rgba(217,182,88,.35),0 6px 14px rgba(0,0,0,.4)}
+.shutter:active{transform:scale(.94)}
+.shutter span{display:block;width:100%;height:100%;border-radius:50%;background:#fff center/cover no-repeat;
+  border:2px solid var(--robe)}
+.flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .35s}
+.flash.on{opacity:.85;transition:none}
+input[type=file]{display:none}
+</style>
+</head>
+<body>
+<div class="cam" id="cam">
+  <div class="view" id="view">
+    <video id="v" autoplay playsinline muted></video>
+    <div class="frame">
+      <svg class="corner tl" viewBox="0 0 64 64"><use href="#orn"/></svg>
+      <svg class="corner tr" viewBox="0 0 64 64"><use href="#orn"/></svg>
+      <svg class="corner bl" viewBox="0 0 64 64"><use href="#orn"/></svg>
+      <svg class="corner br" viewBox="0 0 64 64"><use href="#orn"/></svg>
+      <span class="bracket l"></span><span class="bracket r"></span>
+      <span class="bracket l2"></span><span class="bracket r2"></span>
+    </div>
+    <div class="cap">จัดท่าหนุมานในกรอบ</div>
+    <div class="msg" id="msg"></div>
+    <div class="flash" id="flash"></div>
+  </div>
+  <div class="bar">
+    <button class="side" id="gal" type="button">
+      <span class="ico"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.7"/><path d="M4 18l5-5 4 4 3-3 4 4"/></svg></span>
+      คลังรูปภาพ
+    </button>
+    <button class="shutter" id="shot" type="button" aria-label="ถ่ายรูป"><span id="mark"></span></button>
+    <button class="side" id="flip" type="button">
+      <span class="ico"><svg viewBox="0 0 24 24"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><path d="M9 13.5a3 3 0 015.2-2M15 13.5a3 3 0 01-5.2 2"/><path d="M14.4 9.8v1.9h-1.9M9.6 17.2v-1.9h1.9" /></svg></span>
+      สลับกล้อง
+    </button>
+  </div>
+  <input type="file" id="file" accept="image/*">
+</div>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <g id="orn" fill="none" stroke="#D9B658" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 60V16Q4 4 16 4H60" stroke-width="3.5"/>
+      <path d="M12 52V22Q12 12 22 12H52" stroke-width="1.6" opacity=".8"/>
+      <path d="M20 20c10 0 14 4 14 12s-8 10-12 6-1-9 3-8" stroke-width="2"/>
+      <path d="M20 20c0 10 4 14 12 14" stroke-width="1.4" opacity=".7"/>
+      <path d="M40 8c3 6 8 8 14 8M8 40c6 3 8 8 8 14" stroke-width="2"/>
+    </g>
+  </defs>
+</svg>
+
+<script>
+(function(){
+  var MAXSIDE = 1024, QUALITY = 0.9;
+  var facing = 'environment';   // กล้องหลังเป็นค่าเริ่มต้น
+  var stream = null, args = {};
+  var v = document.getElementById('v'), cam = document.getElementById('cam');
+  var msg = document.getElementById('msg'), flash = document.getElementById('flash');
+  var viewEl = document.getElementById('view');
+
+  // ---- Streamlit component protocol (v1) ----
+  function send(type, data){
+    window.parent.postMessage(Object.assign({isStreamlitMessage:true, type:type}, data||{}), '*');
+  }
+  function setHeight(){
+    var w = document.documentElement.clientWidth || 360;
+    var h = Math.max(520, Math.min(760, Math.round(w * 1.72)));
+    cam.style.height = h + 'px';
+    send('streamlit:setFrameHeight', {height: h + 24});
+  }
+  function setValue(val){
+    send('streamlit:setComponentValue', {value: val, dataType: 'json'});
+  }
+  window.addEventListener('message', function(e){
+    if(!e.data || e.data.type !== 'streamlit:render') return;
+    args = e.data.args || {};
+    if(args.mark){ document.getElementById('mark').style.backgroundImage = 'url(data:image/jpeg;base64,' + args.mark + ')'; }
+  });
+  window.addEventListener('resize', setHeight);
+  send('streamlit:componentReady', {apiVersion: 1});
+  setHeight();
+
+  // ---- Camera ----
+  function showMsg(t){ msg.textContent = t; msg.style.display = 'flex'; }
+  function hideMsg(){ msg.style.display = 'none'; }
+
+  function stop(){
+    if(stream){ stream.getTracks().forEach(function(t){ t.stop(); }); stream = null; }
+  }
+  function start(){
+    stop();
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      showMsg('เบราว์เซอร์นี้เปิดกล้องไม่ได้ กดปุ่ม "คลังรูปภาพ" เพื่อเลือกรูปแทน'); return;
+    }
+    var tryFacing = function(mode){
+      return navigator.mediaDevices.getUserMedia({
+        video: {facingMode: {ideal: mode}, width: {ideal: 1920}, height: {ideal: 1920}}, audio: false});
+    };
+    tryFacing(facing).then(function(s){
+      stream = s; v.srcObject = s; hideMsg();
+      var st = s.getVideoTracks()[0].getSettings ? s.getVideoTracks()[0].getSettings() : {};
+      var front = (st.facingMode ? st.facingMode === 'user' : facing === 'user');
+      v.classList.toggle('mirror', front);
+    }).catch(function(err){
+      showMsg('เปิดกล้องไม่ได้ (' + (err && err.name ? err.name : 'error') + ') กรุณาอนุญาตการใช้กล้องในเบราว์เซอร์ หรือกดปุ่ม "คลังรูปภาพ" เพื่อเลือกรูปแทน');
+    });
+  }
+
+  function emit(canvas){
+    var url = canvas.toDataURL('image/jpeg', QUALITY);
+    setValue({image: url, nonce: Date.now() + '-' + Math.random().toString(36).slice(2, 8)});
+  }
+  function scaled(srcW, srcH){
+    var s = Math.min(1, MAXSIDE / Math.max(srcW, srcH));
+    return {w: Math.max(1, Math.round(srcW * s)), h: Math.max(1, Math.round(srcH * s))};
+  }
+
+  // ถ่ายภาพ: ตัดตามส่วนที่เห็นบนจอ (object-fit: cover) เพื่อให้ได้ภาพเหมือนที่เห็น
+  document.getElementById('shot').addEventListener('click', function(){
+    if(!stream || !v.videoWidth){ return; }
+    var vw = v.videoWidth, vh = v.videoHeight;
+    var ca = viewEl.clientWidth / viewEl.clientHeight, va = vw / vh;
+    var sx = 0, sy = 0, sw = vw, sh = vh;
+    if(va > ca){ sw = vh * ca; sx = (vw - sw) / 2; } else { sh = vw / ca; sy = (vh - sh) / 2; }
+    var d = scaled(sw, sh), c = document.createElement('canvas');
+    c.width = d.w; c.height = d.h;
+    var ctx = c.getContext('2d');
+    if(v.classList.contains('mirror')){ ctx.translate(d.w, 0); ctx.scale(-1, 1); }
+    ctx.drawImage(v, sx, sy, sw, sh, 0, 0, d.w, d.h);
+    flash.classList.add('on'); setTimeout(function(){ flash.classList.remove('on'); }, 60);
+    emit(c);
+  });
+
+  document.getElementById('flip').addEventListener('click', function(){
+    facing = (facing === 'environment') ? 'user' : 'environment';
+    start();
+  });
+
+  // คลังรูปภาพ
+  var fileInput = document.getElementById('file');
+  document.getElementById('gal').addEventListener('click', function(){ fileInput.value = ''; fileInput.click(); });
+  fileInput.addEventListener('change', function(){
+    var f = fileInput.files && fileInput.files[0];
+    if(!f) return;
+    var img = new Image(), u = URL.createObjectURL(f);
+    img.onload = function(){
+      var d = scaled(img.naturalWidth, img.naturalHeight), c = document.createElement('canvas');
+      c.width = d.w; c.height = d.h;
+      c.getContext('2d').drawImage(img, 0, 0, d.w, d.h);   // เบราว์เซอร์สมัยใหม่หมุนตาม EXIF ให้เอง
+      URL.revokeObjectURL(u); emit(c);
+    };
+    img.onerror = function(){ showMsg('อ่านไฟล์ภาพนี้ไม่ได้ ลองเลือกไฟล์อื่น'); setTimeout(function(){ if(stream) hideMsg(); }, 2500); };
+    img.src = u;
+  });
+
+  window.addEventListener('pagehide', stop);
+  start();
+})();
+</script>
+</body>
+</html>
