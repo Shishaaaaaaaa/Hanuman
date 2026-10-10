@@ -8,6 +8,8 @@ import base64
 import html
 import io
 import json
+import shutil
+import urllib.request
 
 import cv2
 import numpy as np
@@ -20,6 +22,12 @@ MODEL_PATHS = [  # ลำดับไม่มีผลต่อผล (เฉ�
     os.path.join(HERE, "hanuman_efficientnet.keras"),
     os.path.join(HERE, "hanuman_convnext.keras"),
 ]
+
+# ไฟล์ที่ใหญ่เกิน 100 MB เก็บไว้ที่ GitHub Releases แล้วให้แอปดาวน์โหลดตอนเริ่มทำงาน (ไม่ต้องอยู่ใน repo)
+# แก้ USER/REPO/TAG ให้ตรงกับของจริงหลังสร้าง Release
+MODEL_URLS = {
+    "hanuman_convnext.keras": "https://github.com/shishaaaaaaaa/hanuman/releases/download/models-v1/hanuman_convnext.keras",
+}
 LORE_PATH = os.path.join(HERE, "lore.json")
 ASSETS = os.path.join(HERE, "assets")
 
@@ -64,10 +72,27 @@ class SoftVotingEnsemble:
         return np.mean([m.predict(x, verbose=verbose) for m in self.models], axis=0)
 
 
-@st.cache_resource(show_spinner="กำลังโหลดโมเดล...")
+def ensure_file(path: str):
+    """ถ้ายังไม่มีไฟล์ในเครื่องและมี URL ให้ดาวน์โหลดมาไว้ข้างๆ แอป (โหลดครั้งเดียวต่อการรีบูต)"""
+    url = MODEL_URLS.get(os.path.basename(path))
+    if os.path.exists(path) or not url:
+        return
+    tmp = path + ".part"
+    req = urllib.request.Request(url, headers={"User-Agent": "hanumatch-app"})
+    with urllib.request.urlopen(req, timeout=180) as r, open(tmp, "wb") as f:
+        shutil.copyfileobj(r, f)
+    if os.path.getsize(tmp) < 1_000_000:  # เล็กผิดปกติ = ไม่ใช่ไฟล์โมเดล (เช่น หน้า error)
+        os.remove(tmp)
+        raise RuntimeError(f"ดาวน์โหลดโมเดลไม่สำเร็จ: {url}")
+    os.replace(tmp, path)
+
+
+@st.cache_resource(show_spinner="กำลังโหลดโมเดล (ครั้งแรกอาจใช้เวลาสักครู่)...")
 def get_model():
     import keras
 
+    for p in MODEL_PATHS:
+        ensure_file(p)
     return SoftVotingEnsemble([keras.saving.load_model(p, compile=False) for p in MODEL_PATHS])
 
 
@@ -328,4 +353,7 @@ else:
         if res and st.button("ดูผลล่าสุด", type="secondary", use_container_width=True):
             show_result(res)
 
-    get_model()  # อุ่นโมเดลไว้ล่วงหน้าให้สแกนครั้งแรกเร็วขึ้น
+    try:
+        get_model()  # อุ่นโมเดลไว้ล่วงหน้าให้สแกนครั้งแรกเร็วขึ้น
+    except Exception as exc:  # noqa: BLE001  (แสดงข้อความอ่านง่ายแทนหน้า traceback)
+        st.error(f"โหลดโมเดลไม่สำเร็จ: {exc}")
