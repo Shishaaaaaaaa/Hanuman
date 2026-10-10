@@ -16,7 +16,10 @@ import streamlit.components.v1 as components
 from PIL import Image, ImageOps
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(HERE, "hanuman_model.keras")
+MODEL_PATHS = [  # ลำดับไม่มีผลต่อผล (เฉลี่ยความน่าจะเป็นเท่ากัน)
+    os.path.join(HERE, "hanuman_efficientnet.keras"),
+    os.path.join(HERE, "hanuman_convnext.keras"),
+]
 LORE_PATH = os.path.join(HERE, "lore.json")
 ASSETS = os.path.join(HERE, "assets")
 
@@ -50,11 +53,22 @@ MARK_B64 = b64_file("mark.jpg")
 PATTERN_B64 = b64_file("pattern.jpg")
 
 
+class SoftVotingEnsemble:
+    """รวมหลายโมเดลด้วย Soft Voting (เฉลี่ยความน่าจะเป็น)
+    ใช้ .predict(x, verbose=0) เหมือนโมเดลเดี่ยว โค้ดส่วนอื่นจึงไม่ต้องแก้"""
+
+    def __init__(self, models):
+        self.models = models
+
+    def predict(self, x, verbose=0):
+        return np.mean([m.predict(x, verbose=verbose) for m in self.models], axis=0)
+
+
 @st.cache_resource(show_spinner="กำลังโหลดโมเดล...")
 def get_model():
     import keras
 
-    return keras.saving.load_model(MODEL_PATH, compile=False)
+    return SoftVotingEnsemble([keras.saving.load_model(p, compile=False) for p in MODEL_PATHS])
 
 
 # ---------------- Preprocess (เหมือนตอนเทรน) ----------------
